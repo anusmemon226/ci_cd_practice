@@ -1,0 +1,75 @@
+name: CI/CD Pipeline
+
+permissions: 
+    contents: write
+    packages: write
+    id-token: write
+
+on:
+    push: 
+        branches: [main]
+
+jobs:
+    terraform:
+        name: Create Cloud Infrastructure
+        runs-on: ubuntu-latest
+        outputs: 
+            manager_ip: ${{steps.extract_ip.outputs.manager_ip}}
+        steps:
+            - uses: actions/checkout@v4
+        
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                aws-region: us-east-1
+                aws-access-key-id: ${{secrets.AWS_ACCESS_KEY_ID}}
+                aws-secret-access-key: ${{secrets.AWS_SECRET_ACCESS_KEY}}
+
+            - name: Setup Terraform CLI
+              uses: hashicorp/setup-terraform@v3
+              with:
+                  terraform_version: 1.12.1
+
+            - name: Terraform Init
+              run: terraform -chdir=terraform init -input=false
+
+            - name: Terraform Apply
+              run: terraform -chdir=terraform apply -auto-approve
+
+    build_and_push:
+        name: Build & Push Images
+        needs: terraform
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: Set up Docker Buildx
+              uses: docker/setup-buildx-action@v3
+
+            - name: Log in to GHCR
+              uses: docker/login-action@v3
+              with:
+                registry: ghcr.io
+                username: ${{ github.actor }}
+                password: ${{ secrets.GITHUB_TOKEN }}
+
+
+            - name: Build & push backend image
+              uses: docker/build-push-action@v5
+              with:
+                  context: ./backend
+                  dockerfile: Dockerfile
+                  push: true 
+                  tags: |
+                      ghcr.io/${{ github.repository }}/nodejs-todo:latest
+                  build-args: |
+                      DATABASE_URL=${{ secrets.NEON_DATABASE_URL }}
+
+            - name: Build & push frontend image
+              uses: docker/build-push-action@v6
+              with:
+                  context: ./frontend
+                  dockerfile: Dockerfile
+                  push: true
+                  tags: |
+                      ghcr.io/${{ github.repository }}/nextjs-todo:latest

@@ -1,0 +1,5 @@
+ami_id="ami-0731becbf832f281e"
+key_name = "my-key"
+vpc_id = "vpc-0c91b1f64a2df59e0"
+aws_region = "us-east-1"
+subnet_id = "subnet-088a00adf19845128"
